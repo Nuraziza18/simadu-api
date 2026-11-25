@@ -1,0 +1,154 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "SIMADU API",
+    "version": "1.0.0",
+    "description": "Sistem Layanan Informasi dan Pengaduan Mahasiswa. Klik **Authorize** lalu isi token hasil `POST /api/auth/login` (tanpa kata 'Bearer')."
+  },
+  "servers": [{ "url": "http://localhost:3000" }],
+  "tags": [{ "name": "Auth" }, { "name": "Pengaduan" }],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT" }
+    },
+    "schemas": {
+      "LoginRequest": {
+        "type": "object", "required": ["username", "password"], "additionalProperties": false,
+        "properties": { "username": { "type": "string", "example": "budi" }, "password": { "type": "string", "example": "Budi#12345" } }
+      },
+      "PengaduanInput": {
+        "type": "object", "required": ["judul", "kategori", "deskripsi"], "additionalProperties": false,
+        "properties": {
+          "judul": { "type": "string", "minLength": 5, "maxLength": 100, "example": "AC ruang kuliah rusak" },
+          "kategori": { "type": "string", "enum": ["Fasilitas", "Akademik", "TI"] },
+          "deskripsi": { "type": "string", "minLength": 10, "maxLength": 1000, "example": "AC di ruang B-203 tidak dingin sejak minggu lalu." }
+        }
+      },
+      "StatusInput": {
+        "type": "object", "required": ["status"], "additionalProperties": false,
+        "properties": { "status": { "type": "string", "enum": ["diajukan", "diproses", "selesai"] } }
+      },
+      "Pengaduan": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "example": 1 },
+          "mahasiswaId": { "type": "string", "example": "2024001" },
+          "judul": { "type": "string" },
+          "kategori": { "type": "string", "enum": ["Fasilitas", "Akademik", "TI"] },
+          "deskripsi": { "type": "string" },
+          "status": { "type": "string", "enum": ["diajukan", "diproses", "selesai"] },
+          "createdAt": { "type": "string", "format": "date-time", "example": "2026-11-23T08:00:00.000Z" }
+        }
+      },
+      "Success": {
+        "type": "object",
+        "properties": { "success": { "type": "boolean", "example": true }, "message": { "type": "string" }, "data": { "nullable": true } }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "example": false },
+          "message": { "type": "string" },
+          "errors": { "type": "array", "items": { "type": "object", "properties": { "field": { "type": "string" }, "message": { "type": "string" } } } }
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": { "description": "400 - Input tidak valid", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "success": false, "message": "Validasi gagal", "errors": [{ "field": "judul", "message": "Wajib diisi" }] } } } },
+      "Unauthorized": { "description": "401 - Token tidak ada/tidak valid/kedaluwarsa", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "success": false, "message": "Token autentikasi tidak ditemukan" } } } },
+      "Forbidden": { "description": "403 - Tidak punya izin (role/kepemilikan/status)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "success": false, "message": "Anda tidak berhak mengakses pengaduan ini" } } } },
+      "NotFound": { "description": "404 - Data tidak ditemukan", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "success": false, "message": "Pengaduan tidak ditemukan" } } } },
+      "ServerError": { "description": "500 - Kesalahan server", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "success": false, "message": "Terjadi kesalahan pada server" } } } }
+    },
+    "parameters": {
+      "IdParam": { "name": "id", "in": "path", "required": true, "schema": { "type": "integer", "minimum": 1 } }
+    }
+  },
+  "paths": {
+    "/api/auth/login": {
+      "post": {
+        "tags": ["Auth"], "summary": "Login dan dapatkan Bearer token",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LoginRequest" } } } },
+        "responses": {
+          "200": { "description": "Login berhasil", "content": { "application/json": { "example": { "success": true, "message": "Login berhasil", "data": { "token": "eyJhbGciOi...", "tokenType": "Bearer", "expiresIn": "15m", "user": { "id": "2024001", "username": "budi", "name": "Budi Santoso", "role": "mahasiswa" } } } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "description": "401 - Kredensial salah", "content": { "application/json": { "example": { "success": false, "message": "Username atau password salah" } } } },
+          "500": { "$ref": "#/components/responses/ServerError" }
+        }
+      }
+    },
+    "/api/pengaduan": {
+      "get": {
+        "tags": ["Pengaduan"], "summary": "Daftar pengaduan (mahasiswa: milik sendiri, admin: semua)", "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Berhasil", "content": { "application/json": { "schema": { "allOf": [{ "$ref": "#/components/schemas/Success" }, { "type": "object", "properties": { "data": { "type": "array", "items": { "$ref": "#/components/schemas/Pengaduan" } } } }] } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "500": { "$ref": "#/components/responses/ServerError" }
+        }
+      },
+      "post": {
+        "tags": ["Pengaduan"], "summary": "Buat pengaduan (khusus mahasiswa)", "security": [{ "bearerAuth": [] }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PengaduanInput" } } } },
+        "responses": {
+          "201": { "description": "Dibuat", "content": { "application/json": { "schema": { "allOf": [{ "$ref": "#/components/schemas/Success" }, { "type": "object", "properties": { "data": { "$ref": "#/components/schemas/Pengaduan" } } }] } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "500": { "$ref": "#/components/responses/ServerError" }
+        }
+      }
+    },
+    "/api/pengaduan/{id}": {
+      "parameters": [{ "$ref": "#/components/parameters/IdParam" }],
+      "get": {
+        "tags": ["Pengaduan"], "summary": "Detail pengaduan (pemilik atau admin)", "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Berhasil", "content": { "application/json": { "schema": { "allOf": [{ "$ref": "#/components/schemas/Success" }, { "type": "object", "properties": { "data": { "$ref": "#/components/schemas/Pengaduan" } } }] } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/ServerError" }
+        }
+      },
+      "put": {
+        "tags": ["Pengaduan"], "summary": "Ubah judul, kategori, deskripsi (pemilik, status 'diajukan')", "security": [{ "bearerAuth": [] }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PengaduanInput" } } } },
+        "responses": {
+          "200": { "description": "Berhasil diubah", "content": { "application/json": { "schema": { "allOf": [{ "$ref": "#/components/schemas/Success" }, { "type": "object", "properties": { "data": { "$ref": "#/components/schemas/Pengaduan" } } }] } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/ServerError" }
+        }
+      },
+      "delete": {
+        "tags": ["Pengaduan"], "summary": "Hapus pengaduan (pemilik, status 'diajukan')", "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Berhasil dihapus", "content": { "application/json": { "example": { "success": true, "message": "Pengaduan berhasil dihapus", "data": null } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/ServerError" }
+        }
+      }
+    },
+    "/api/pengaduan/{id}/status": {
+      "parameters": [{ "$ref": "#/components/parameters/IdParam" }],
+      "patch": {
+        "tags": ["Pengaduan"], "summary": "Perbarui status penanganan (khusus admin)", "security": [{ "bearerAuth": [] }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StatusInput" } } } },
+        "responses": {
+          "200": { "description": "Status diperbarui", "content": { "application/json": { "schema": { "allOf": [{ "$ref": "#/components/schemas/Success" }, { "type": "object", "properties": { "data": { "$ref": "#/components/schemas/Pengaduan" } } }] } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/ServerError" }
+        }
+      }
+    }
+  }
+}

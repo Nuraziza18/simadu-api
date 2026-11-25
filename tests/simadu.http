@@ -1,0 +1,146 @@
+@base = http://localhost:3000
+
+### ============ LOGIN (kirim ketiganya dulu) ============
+
+### Login Budi
+# @name loginBudi
+POST {{base}}/api/auth/login
+Content-Type: application/json
+
+{ "username": "budi", "password": "Budi#12345" }
+
+###
+@tokenBudi = {{loginBudi.response.body.data.token}}
+
+### Login Siti
+# @name loginSiti
+POST {{base}}/api/auth/login
+Content-Type: application/json
+
+{ "username": "siti", "password": "Siti#12345" }
+
+###
+@tokenSiti = {{loginSiti.response.body.data.token}}
+
+### Login Admin
+# @name loginAdmin
+POST {{base}}/api/auth/login
+Content-Type: application/json
+
+{ "username": "admin", "password": "Admin#12345" }
+
+###
+@tokenAdmin = {{loginAdmin.response.body.data.token}}
+
+### ============ 12 SKENARIO WAJIB ============
+
+### 1. Login kredensial benar -> 200 (pakai request "Login Budi" di atas)
+
+### 2. Login password salah -> 401
+POST {{base}}/api/auth/login
+Content-Type: application/json
+
+{ "username": "budi", "password": "salah" }
+
+### 3. Tanpa token -> 401
+GET {{base}}/api/pengaduan
+
+### 4. Token tidak valid -> 401
+GET {{base}}/api/pengaduan
+Authorization: Bearer abc.def.ghi
+
+### 5. Mahasiswa buat pengaduan valid -> 201
+POST {{base}}/api/pengaduan
+Authorization: Bearer {{tokenBudi}}
+Content-Type: application/json
+
+{ "judul": "Proyektor rusak", "kategori": "Fasilitas", "deskripsi": "Proyektor di ruang A-101 tidak menyala." }
+
+### 6. Mahasiswa baca pengaduan sendiri (id 1 milik budi) -> 200
+GET {{base}}/api/pengaduan/1
+Authorization: Bearer {{tokenBudi}}
+
+### 7. Mahasiswa baca pengaduan orang lain (id 3 milik siti) -> 403
+GET {{base}}/api/pengaduan/3
+Authorization: Bearer {{tokenBudi}}
+
+### 8. Mahasiswa ubah status -> 403
+PATCH {{base}}/api/pengaduan/1/status
+Authorization: Bearer {{tokenBudi}}
+Content-Type: application/json
+
+{ "status": "selesai" }
+
+### 9. Admin lihat seluruh pengaduan -> 200
+GET {{base}}/api/pengaduan
+Authorization: Bearer {{tokenAdmin}}
+
+### 10. Admin perbarui status -> 200
+PATCH {{base}}/api/pengaduan/1/status
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{ "status": "diproses" }
+
+### 11. Field wajib kosong -> 400
+POST {{base}}/api/pengaduan
+Authorization: Bearer {{tokenBudi}}
+Content-Type: application/json
+
+{ "judul": "", "kategori": "TI" }
+
+### 12. ID tidak ditemukan -> 404
+GET {{base}}/api/pengaduan/99999
+Authorization: Bearer {{tokenBudi}}
+
+### ============ SKENARIO TAMBAHAN ============
+
+### T1. Client menyisipkan id/mahasiswaId/status -> 400
+POST {{base}}/api/pengaduan
+Authorization: Bearer {{tokenBudi}}
+Content-Type: application/json
+
+{ "judul": "Proyektor rusak", "kategori": "Fasilitas", "deskripsi": "Proyektor di ruang A-101 tidak menyala.", "mahasiswaId": "2024002", "status": "selesai" }
+
+### T2. Admin membuat pengaduan -> 403
+POST {{base}}/api/pengaduan
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{ "judul": "Proyektor rusak", "kategori": "Fasilitas", "deskripsi": "Proyektor di ruang A-101 tidak menyala." }
+
+### T3. Siti mengubah pengaduan milik Budi (id 2) -> 403
+PUT {{base}}/api/pengaduan/2
+Authorization: Bearer {{tokenSiti}}
+Content-Type: application/json
+
+{ "judul": "Judul diubah Siti", "kategori": "TI", "deskripsi": "Percobaan mengubah milik orang lain." }
+
+### T4. Budi mengubah pengaduan id 1 yang sudah diproses -> 403
+PUT {{base}}/api/pengaduan/1
+Authorization: Bearer {{tokenBudi}}
+Content-Type: application/json
+
+{ "judul": "Judul diubah Budi", "kategori": "TI", "deskripsi": "Percobaan mengubah setelah diproses." }
+
+### T5. Admin kirim status yang tidak dikenal -> 400
+PATCH {{base}}/api/pengaduan/2/status
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{ "status": "ngawur" }
+
+### T6. ID bukan angka -> 400
+GET {{base}}/api/pengaduan/abc
+Authorization: Bearer {{tokenBudi}}
+
+### T7. Budi mengubah pengaduan miliknya (id 2, status diajukan) -> 200
+PUT {{base}}/api/pengaduan/2
+Authorization: Bearer {{tokenBudi}}
+Content-Type: application/json
+
+{ "judul": "Wi-Fi kampus sangat lambat", "kategori": "TI", "deskripsi": "Koneksi Wi-Fi di perpustakaan sering terputus." }
+
+### T8. Budi menghapus pengaduan miliknya (id 2) -> 200
+DELETE {{base}}/api/pengaduan/2
+Authorization: Bearer {{tokenBudi}}
